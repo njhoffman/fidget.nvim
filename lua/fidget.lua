@@ -52,12 +52,7 @@ local options = {
       return string.format("%s %s", spinner, fidget_name)
     end,
     task = function(task_name, message, percentage)
-      return string.format(
-        "%s%s [%s]",
-        message,
-        percentage and string.format(" (%.0f%%)", percentage) or "",
-        task_name
-      )
+      return string.format("%s%s [%s]", message, percentage and string.format(" (%.0f%%)", percentage) or "", task_name)
     end,
   },
   sources = {},
@@ -68,7 +63,6 @@ local options = {
 }
 
 local fidgets = {}
-
 
 local function ignore_E523(callable)
   -- Wrap a function and suppress the E523 error.
@@ -83,9 +77,11 @@ local function ignore_E523(callable)
 
   return function()
     status, ex = pcall(callable)
-    if not status then  -- exception!
+    if not status then -- exception!
       if string.find(ex, "E523: Not allowed here") then
         -- Ignore E523 error (not allowed here): see #68
+      elseif string.find(ex, "E565: Not allowed to change text") then
+        -- Ignore E565 error (Not allowed to change text or window): see #68
       else
         error("Error occured:\n" .. ex)
       end
@@ -109,11 +105,7 @@ local function get_window_position(offset)
   if options.window.relative == "editor" then
     local statusline_height = 0
     local laststatus = vim.opt.laststatus:get()
-    if
-      laststatus == 2
-      or laststatus == 3
-      or (laststatus == 1 and #api.nvim_tabpage_list_wins() > 1)
-    then
+    if laststatus == 2 or laststatus == 3 or (laststatus == 1 and #api.nvim_tabpage_list_wins() > 1) then
       statusline_height = 1
     end
 
@@ -130,10 +122,7 @@ local function get_window_position(offset)
     baseheight = 0
     if options.window.relative == "editor" then
       local showtabline = vim.opt.showtabline:get()
-      if
-        showtabline == 2
-        or (showtabline == 1 and #api.nvim_list_tabpages() > 1)
-      then
+      if showtabline == 2 or (showtabline == 1 and #api.nvim_list_tabpages() > 1) then
         baseheight = 1
       end
     end
@@ -151,8 +140,7 @@ local function get_window_position(offset)
   end
 
   -- returns row, col
-  return options.align.bottom and (height - offset) or (baseheight + offset),
-    options.align.right and width or 1
+  return options.align.bottom and (height - offset) or (baseheight + offset), options.align.right and width or 1
 end
 
 local base_fidget = {
@@ -172,22 +160,15 @@ function base_fidget:fmt()
   local function subtab(s)
     return s and s:gsub("\t", "  ") or nil
   end
+
   local strlen = vim.fn.strdisplaywidth
 
-  local line = options.fmt.fidget(
-    self.name,
-    self.spinner_idx == -1 and options.text.done
-      or options.text.spinner[self.spinner_idx + 1]
-  )
+  local line = options.fmt.fidget(self.name,
+    self.spinner_idx == -1 and options.text.done or options.text.spinner[self.spinner_idx + 1])
   self.lines = { line }
   self.max_line_len = strlen(line)
   for _, task in pairs(self.tasks) do
-    line = options.fmt.task
-      and options.fmt.task(
-        subtab(task.title),
-        subtab(task.message),
-        task.percentage
-      )
+    line = options.fmt.task and options.fmt.task(subtab(task.title), subtab(task.message), task.percentage)
     if line then
       if options.fmt.stack_upwards then
         table.insert(self.lines, 1, line)
@@ -199,11 +180,8 @@ function base_fidget:fmt()
   end
 
   -- Never try to output any text wider than what we are aligning to.
-  self.max_line_len = math.min(
-    self.max_line_len,
-    options.window.relative == "editor" and vim.opt.columns:get()
-      or api.nvim_win_get_width(0)
-  )
+  self.max_line_len = math.min(self.max_line_len,
+    options.window.relative == "editor" and vim.opt.columns:get() or api.nvim_win_get_width(0))
 
   if options.fmt.max_width > 0 then
     self.max_line_len = math.min(self.max_line_len, options.fmt.max_width)
@@ -247,8 +225,7 @@ function base_fidget:show(offset)
   end
 
   local row, col = get_window_position(offset)
-  local anchor = (options.align.bottom and "S" or "N")
-    .. (options.align.right and "E" or "W")
+  local anchor = (options.align.bottom and "S" or "N") .. (options.align.right and "E" or "W")
 
   if self.bufid == nil or not api.nvim_buf_is_valid(self.bufid) then
     self.bufid = api.nvim_create_buf(false, true)
@@ -269,8 +246,7 @@ function base_fidget:show(offset)
     })
   else
     api.nvim_win_set_config(self.winid, {
-      win = options.window.relative == "win" and api.nvim_get_current_win()
-        or nil,
+      win = options.window.relative == "win" and api.nvim_get_current_win() or nil,
       relative = options.window.relative,
       width = width,
       height = height,
@@ -366,11 +342,7 @@ function base_fidget:spin()
 end
 
 local function new_fidget(key, name)
-  local fidget = vim.tbl_extend(
-    "force",
-    vim.deepcopy(base_fidget),
-    { key = key, name = name }
-  )
+  local fidget = vim.tbl_extend("force", vim.deepcopy(base_fidget), { key = key, name = name })
   if options.timer.spinner_rate > 0 then
     vim.defer_fn(function()
       fidget:spin()
@@ -386,10 +358,7 @@ end
 local function handle_progress(err, msg, info)
   -- See: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#progress
 
-  log.debug(
-    "Received progress notification:",
-    { err = err, msg = msg, info = info }
-  )
+  log.debug("Received progress notification:", { err = err, msg = msg, info = info })
 
   local task = msg.token
   local val = msg.value
@@ -446,13 +415,7 @@ local function handle_progress(err, msg, info)
     end
   else
     if options.debug.strict then
-      log.warn(
-        string.format(
-          "Invalid progress notification from %s, unrecognized 'kind': %s",
-          client_name,
-          msg
-        )
-      )
+      log.warn(string.format("Invalid progress notification from %s, unrecognized 'kind': %s", client_name, msg))
     else
       fidget:kill_task(task)
     end
@@ -512,13 +475,13 @@ function M.setup(opts)
   end
 
   if vim.lsp.handlers["$/progress"] then
-     local old_handler = vim.lsp.handlers["$/progress"]
-     vim.lsp.handlers["$/progress"] = function(...)
-       old_handler(...)
-       handle_progress(...)
-     end
+    local old_handler = vim.lsp.handlers["$/progress"]
+    vim.lsp.handlers["$/progress"] = function(...)
+      old_handler(...)
+      handle_progress(...)
+    end
   else
-     vim.lsp.handlers["$/progress"] = handle_progress
+    vim.lsp.handlers["$/progress"] = handle_progress
   end
 
   vim.cmd([[highlight default link FidgetTitle Title]])
